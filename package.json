@@ -1,0 +1,59 @@
+{
+  "name": "vite-enhanced-proxy",
+  "version": "1.0.0",
+  "description": "一个功能强大的 Vite 代理插件，提供彩色日志、环境切换、过滤器、中间件等高级功能",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "proxy",
+    "development",
+    "middleware",
+    "logging",
+    "typescript"
+  ],
+  "author": "22wink <2861294184@qq.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/vite-enhanced-proxy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/vite-enhanced-proxy/issues"
+  },
+  "homepage": "https://github.com/yourusername/vite-enhanced-proxy#readme",
+  "peerDependencies": {
+    "vite": "^3.0.0 || ^4.0.0 || ^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "rimraf": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+} 

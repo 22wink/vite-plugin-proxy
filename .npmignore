@@ -1,0 +1,27 @@
+# Source files
+modules/
+examples/
+*.ts
+!dist/**/*.d.ts
+
+# Config files
+tsconfig.json
+tsup.config.ts
+.gitignore
+
+# Development files
+node_modules/
+.vscode/
+.idea/
+
+# Logs and cache
+*.log
+*.tsbuildinfo
+
+# Test files
+**/*.test.*
+**/*.spec.*
+coverage/
+
+# Documentation (除了 README.md)
+README-proxy-plugin.md 
