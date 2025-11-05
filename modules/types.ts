@@ -2,20 +2,33 @@ import type { ProxyOptions } from "vite";
 
 // 代理环境枚举
 export enum ProxyEnv {
-  Local = "local",
-  Development = "development",
-  Staging = "staging",
-  Production = "production",
-  Testing = "testing"
+  Local = "local"
 }
 
-// 代理目标配置
-export interface ProxyTarget {
-  [key: string]: string;
-}
+// 允许的环境键：内置枚举或自定义字符串
+export type EnvKey = ProxyEnv | (string & {});
 
-// 代理目标映射
-export type ProxyTargets = Record<ProxyEnv, ProxyTarget>;
+// 路由配置：字符串（仅目标）或对象（包含路径/重写）
+export type ProxyRouteConfig =
+  | string
+  | {
+      target: string;
+      path?: string; // 自定义匹配路径（不填时按键或默认规则推导）
+      rewrite?: string; // 自定义重写前缀
+    };
+
+// 兼容旧字段，同时支持任意键
+type LegacyProxyTarget = {
+  v3?: string;
+  v2?: string;
+  v1?: string;
+};
+
+// 代理目标配置（支持任意键和值为字符串或对象）
+export type ProxyTarget = LegacyProxyTarget & Record<string, ProxyRouteConfig>;
+
+// 代理目标映射（支持自定义环境键）
+export type ProxyTargets<TEnv extends string = EnvKey> = Record<TEnv, ProxyTarget>;
 
 // 日志级别
 export enum LogLevel {
@@ -61,11 +74,11 @@ export type ProxyMiddleware = (
   options: any
 ) => void | Promise<void>;
 
-// 插件配置选项
-export interface ProxyPluginOptions {
+// 插件配置选项（内部与直接传参使用）
+export interface ProxyPluginOptions<TEnv extends string = EnvKey> {
   // 基础配置
-  env?: ProxyEnv;
-  targets?: Partial<ProxyTargets>;
+  env?: TEnv;
+  targets?: Partial<ProxyTargets<TEnv>>;
 
   // 日志配置
   logger?: LoggerConfig;
@@ -90,10 +103,13 @@ export interface ProxyPluginOptions {
   enabled?: boolean;
 }
 
+// 外部用户配置（外部文件 proxy.config.* 使用），与插件选项一致
+export type ProxyPluginUserConfig<TEnv extends string = EnvKey> = ProxyPluginOptions<TEnv>;
+
 // 内部使用的插件状态
-export interface PluginState {
-  env: ProxyEnv;
-  targets: ProxyTargets;
+export interface PluginState<TEnv extends string = EnvKey> {
+  env: TEnv;
+  targets: ProxyTargets<TEnv>;
   logger: Required<LoggerConfig>;
   enabled: boolean;
 }

@@ -2,34 +2,20 @@ import type { Plugin, ProxyOptions } from "vite";
 import type {
   ProxyPluginOptions,
   ProxyTargets,
-  ProxyTarget,
   PluginState,
-  ProxyMiddleware
+  ProxyMiddleware,
+  EnvKey,
+  ProxyRouteConfig
 } from "./types";
 import { ProxyEnv, LogLevel } from "./types";
 import { createLogger, ProxyLogger } from "./logger";
+import { loadExternalProxyConfig } from "./config-loader";
 
-// 默认代理目标配置
-const DEFAULT_PROXY_TARGETS: ProxyTargets = {
-  local: {
-    v1: "http://localhost:8000/api/v1/backend"
-  },
-  development: {
-    v1: "http://localhost:8000/api/v1/backend"
-  },
-  staging: {
-    v1: "http://localhost:8000/api/v1/backend"
-  },
-  production: {
-    v1: "http://localhost:8000/api/v1/backend"
-  },
-  testing: {
-    v1: "http://localhost:8000/api/v1/backend"
-  }
-};
+// 默认代理目标配置（置空，避免写死）
+const DEFAULT_PROXY_TARGETS: ProxyTargets<ProxyEnv> = {} as ProxyTargets<ProxyEnv>;
 
-class ViteProxyPlugin {
-  private state: PluginState;
+class ViteProxyPlugin<TEnv extends string = EnvKey> {
+  private state: PluginState<TEnv>;
   private logger: ProxyLogger;
   private middleware: ProxyMiddleware[];
   private requestFilter?: (url: string, method: string) => boolean;
@@ -39,7 +25,7 @@ class ViteProxyPlugin {
     status: number
   ) => boolean;
 
-  constructor(private options: ProxyPluginOptions = {}) {
+  constructor(private options: ProxyPluginOptions<TEnv> = {}) {
     // 初始化状态
     this.state = this.initializeState();
 
@@ -56,9 +42,9 @@ class ViteProxyPlugin {
     // 注意：不在构造函数中输出日志，避免打包时也显示
   }
 
-  private initializeState(): PluginState {
-    const env = this.options.env || ProxyEnv.Local;
-    const targets = { ...DEFAULT_PROXY_TARGETS, ...this.options.targets };
+  private initializeState(): PluginState<TEnv> {
+    const env = (this.options.env as TEnv) || (ProxyEnv.Local as unknown as TEnv);
+    const targets = { ...(DEFAULT_PROXY_TARGETS as any), ...(this.options.targets as any) };
 
     return {
       env,
@@ -81,7 +67,7 @@ class ViteProxyPlugin {
         ...this.options.logger
       },
       enabled: this.options.enabled !== false
-    };
+    } as PluginState<TEnv>;
   }
 
   private createRewriteRule(prefix: string) {
@@ -175,7 +161,7 @@ class ViteProxyPlugin {
         });
 
         // 响应返回
-        proxy.on("proxyRes", (proxyRes, req, res) => {
+        proxy.on("proxyRes", (proxyRes, req) => {
           const method = req.method || "GET";
           const originalUrl = req.url || "";
           const status = proxyRes.statusCode || 0;
@@ -212,8 +198,24 @@ class ViteProxyPlugin {
             const responseHeaders = proxyRes.headers;
             let responseBody: any = null;
 
-            // 尝试捕获响应体
-            if (proxyRes.readable) {
+            // 检查是否是 SSE 流式响应
+            const contentType = proxyRes.headers['content-type'] || '';
+            const isSSE = contentType.includes('text/event-stream');
+
+            // 对于 SSE 响应，不要尝试读取响应体，因为它是持续的流
+            if (isSSE) {
+              this.logger.logDetailedResponse(
+                method,
+                fullResponseUrl,
+                status,
+                {
+                  headers: responseHeaders,
+                  body: "[SSE Stream - Not Captured]",
+                  duration
+                }
+              );
+            } else if (proxyRes.readable) {
+              // 尝试捕获普通响应体
               let chunks: Buffer[] = [];
               proxyRes.on("data", (chunk: Buffer) => {
                 chunks.push(chunk);
@@ -266,7 +268,7 @@ class ViteProxyPlugin {
         });
 
         // 错误处理
-        proxy.on("error", (err, req, res) => {
+        proxy.on("error", (err, req) => {
           const method = req.method || "GET";
           const originalUrl = req.url || "";
           const requestKey = `${method}:${originalUrl}`;
@@ -300,7 +302,7 @@ class ViteProxyPlugin {
     }
 
     const currentTargets =
-      this.state.targets[this.state.env] || this.state.targets[ProxyEnv.Local];
+      (this.state.targets as any)[this.state.env as any] || ((this.state.targets as any)[ProxyEnv.Local as any] || (DEFAULT_PROXY_TARGETS as any)[ProxyEnv.Local]);
     const proxy: Record<string, ProxyOptions> = {};
 
     this.logger.debug(`生成代理配置 - 目标: ${JSON.stringify(currentTargets)}`);
@@ -308,34 +310,37 @@ class ViteProxyPlugin {
     // 应用自定义重写规则
     const customRewrites = this.options.rewriteRules || {};
 
-    // Flow接口代理
-    if (currentTargets.flow) {
-      const path = "/api/flow";
-      proxy[path] = this.createProxyConfig(
-        currentTargets.flow,
-        customRewrites[path] || path
-      );
-      this.logger.debug(`添加Flow代理: ${path} -> ${currentTargets.flow}`);
-    }
+    // 默认键到路径的映射（兼容旧用法）
+    const defaultPathMap: Record<string, string> = {
+      v3: "/api/v3",
+      v2: "/api",
+      v1: "/api/v1"
+    };
 
-    // V3接口代理
-    if (currentTargets.v3) {
-      const path = "/api/v3";
-      proxy[path] = this.createProxyConfig(
-        currentTargets.v3,
-        customRewrites[path] || path
-      );
-      this.logger.debug(`添加V3代理: ${path} -> ${currentTargets.v3}`);
-    }
+    // 动态遍历所有键（显式断言类型）
+    const entries = Object.entries(currentTargets as Record<string, ProxyRouteConfig>);
+    for (const [key, value] of entries) {
+      if (!value) continue;
 
-    // V2接口代理（通用API）
-    if (currentTargets.v2) {
-      const path = "/api";
-      proxy[path] = this.createProxyConfig(
-        currentTargets.v2,
-        customRewrites[path] || path
-      );
-      this.logger.debug(`添加V2代理: ${path} -> ${currentTargets.v2}`);
+      let routePath: string;
+      let target: string;
+      let rewritePath: string;
+
+      if (typeof value === "string") {
+        target = value;
+        routePath = defaultPathMap[key] || (key.startsWith("/") ? key : `/${key}`);
+        rewritePath = customRewrites[routePath] || routePath;
+      } else {
+        target = value.target;
+        const derivedPath = defaultPathMap[key] || (key.startsWith("/") ? key : `/${key}`);
+        routePath = value.path || derivedPath;
+        rewritePath = value.rewrite || customRewrites[routePath] || routePath;
+      }
+
+      if (!target || !routePath) continue;
+
+      proxy[routePath] = this.createProxyConfig(target, rewritePath);
+      this.logger.debug(`添加代理: ${key} -> ${routePath} => ${target} (rewrite: ${rewritePath})`);
     }
 
     return proxy;
@@ -346,13 +351,27 @@ class ViteProxyPlugin {
     return {
       name: "vite-proxy-plugin",
       apply: "serve", // 仅在开发模式下应用
-      config: (config, { command }) => {
+      config: async (config, { command }) => {
         // 在开发模式下配置代理
         if (command === "serve") {
           // 如果设置了仅开发模式且当前不是开发模式，则跳过
           if (this.options.devOnly && command !== "serve") {
             this.logger.info("跳过代理配置 - 非开发模式");
             return;
+          }
+
+          // 优先加载外部配置
+          const external = await loadExternalProxyConfig();
+          if (external) {
+            // 合并外部配置到现有选项（外部优先）
+            this.options = { ...this.options, ...external } as ProxyPluginOptions<TEnv>;
+            // 重新初始化状态和依赖
+            this.state = this.initializeState();
+            this.logger = createLogger(this.options.logger);
+            this.middleware = this.options.middleware || [];
+            this.requestFilter = this.options.requestFilter;
+            this.responseFilter = this.options.responseFilter;
+            this.logger.info("已加载外部 proxy.config 配置");
           }
 
           const proxyConfig = this.generateProxyConfig();
@@ -370,7 +389,7 @@ class ViteProxyPlugin {
           }
         }
       },
-      configureServer: server => {
+      configureServer: () => {
         this.logger.info(`代理插件已初始化 - 环境: ${this.state.env}`);
         this.logger.info("开发服务器已启动，代理插件激活");
       }
@@ -378,13 +397,13 @@ class ViteProxyPlugin {
   }
 
   // 公共方法
-  updateEnvironment(env: ProxyEnv): void {
+  updateEnvironment(env: TEnv): void {
     this.state.env = env;
     this.logger.info(`环境已切换到: ${env}`);
   }
 
-  updateTargets(targets: Partial<ProxyTargets>): void {
-    this.state.targets = { ...this.state.targets, ...targets };
+  updateTargets(targets: Partial<ProxyTargets<TEnv>>): void {
+    this.state.targets = { ...this.state.targets, ...targets } as ProxyTargets<TEnv>;
     this.logger.info("代理目标已更新");
   }
 
@@ -398,14 +417,14 @@ class ViteProxyPlugin {
     this.logger.info("代理已禁用");
   }
 
-  getState(): Readonly<PluginState> {
-    return { ...this.state };
+  getState(): Readonly<PluginState<TEnv>> {
+    return { ...this.state } as Readonly<PluginState<TEnv>>;
   }
 }
 
 // 插件工厂函数
-export function createProxyPlugin(options: ProxyPluginOptions = {}): Plugin {
-  const pluginInstance = new ViteProxyPlugin(options);
+export function createProxyPlugin<TEnv extends string = EnvKey>(options: ProxyPluginOptions<TEnv> = {} as ProxyPluginOptions<TEnv>): Plugin {
+  const pluginInstance = new ViteProxyPlugin<TEnv>(options);
   return pluginInstance.getPlugin();
 }
 

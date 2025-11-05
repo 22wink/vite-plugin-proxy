@@ -47,13 +47,12 @@ const getStatusColor = (status: number): string => {
 };
 
 // 日志级别颜色映射
-const levelColors: Record<LogLevel, string> = {
-  [LogLevel.NONE]: colors.gray,
+const levelColors = {
   [LogLevel.ERROR]: colors.red,
   [LogLevel.WARN]: colors.yellow,
   [LogLevel.INFO]: colors.cyan,
   [LogLevel.DEBUG]: colors.gray
-};
+} as const;
 
 export class ProxyLogger {
   private config: Required<LoggerConfig>;
@@ -137,7 +136,7 @@ export class ProxyLogger {
     return this.colorize(this.config.prefix, colors.cyan);
   }
 
-  private formatLogLevel(level: LogLevel): string {
+  private formatLogLevel(level: keyof typeof levelColors): string {
     const color = levelColors[level];
     // 获取日志级别名称
     const levelNames = {

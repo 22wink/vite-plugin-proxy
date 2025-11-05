@@ -11,7 +11,9 @@ export type {
   ResponseFilter,
   ProxyMiddleware,
   PluginState,
-  ProxyEvents
+  ProxyEvents,
+  EnvKey,
+  ProxyPluginUserConfig
 } from "./modules/types";
 
 export { ProxyEnv, LogLevel } from "./modules/types";
