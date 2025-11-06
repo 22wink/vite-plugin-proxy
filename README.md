@@ -36,12 +36,46 @@ yarn add vite-enhanced-proxy
 
 ### 基础用法
 
+**TypeScript 示例：**
+
 ```typescript
 // vite.config.ts
 import { defineConfig } from "vite";
 import { createProxyPlugin, ProxyEnv } from "vite-enhanced-proxy";
 
 export default defineConfig({
+  plugins: [
+    // 最简单的用法
+    createProxyPlugin({
+      env: ProxyEnv.Local
+    })
+  ]
+});
+```
+
+**JavaScript 示例：**
+
+```javascript
+// vite.config.js (ES Module)
+import { defineConfig } from "vite";
+import { createProxyPlugin, ProxyEnv } from "vite-enhanced-proxy";
+
+export default defineConfig({
+  plugins: [
+    // 最简单的用法
+    createProxyPlugin({
+      env: ProxyEnv.Local
+    })
+  ]
+});
+```
+
+```javascript
+// vite.config.js (CommonJS)
+const { defineConfig } = require("vite");
+const { createProxyPlugin, ProxyEnv } = require("vite-enhanced-proxy");
+
+module.exports = defineConfig({
   plugins: [
     // 最简单的用法
     createProxyPlugin({
