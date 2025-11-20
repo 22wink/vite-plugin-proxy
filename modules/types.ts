@@ -1,5 +1,23 @@
 import type { ProxyOptions } from "vite";
 
+// 扩展的代理配置选项，支持 HTTPS 相关选项
+// 使用 Omit 排除可能与 ProxyOptions 冲突的属性，然后重新定义它们以支持更广泛的类型
+export interface ExtendedProxyOptions extends Omit<Partial<ProxyOptions>, 'ca' | 'cert' | 'key' | 'secure'> {
+  // HTTPS 相关选项（Node.js https.request 选项）
+  rejectUnauthorized?: boolean;
+  secure?: boolean;
+  // 其他可能的 HTTPS 选项（支持 Buffer 类型）
+  ca?: string | Buffer | Array<string | Buffer>;
+  cert?: string | Buffer | Array<string | Buffer>;
+  key?: string | Buffer | Array<string | Buffer>;
+  passphrase?: string;
+  pfx?: string | Buffer | Array<string | Buffer | object>;
+  ciphers?: string;
+  honorCipherOrder?: boolean;
+  minVersion?: string;
+  maxVersion?: string;
+}
+
 // 代理环境枚举
 export enum ProxyEnv {
   Local = "local"
@@ -28,6 +46,24 @@ export interface WebSocketConfig {
   protocols?: string | string[];
 }
 
+// SSE (Server-Sent Events) 配置选项
+export interface SSEConfig {
+  // 是否启用 SSE 代理
+  enabled?: boolean;
+  // 是否记录 SSE 连接日志
+  logConnections?: boolean;
+  // 是否记录 SSE 消息日志
+  logMessages?: boolean;
+  // 最大消息日志长度
+  maxMessageLength?: number;
+  // 是否美化 JSON 消息
+  prettifyMessages?: boolean;
+  // 自定义 SSE 响应头部
+  headers?: Record<string, string>;
+  // SSE 重连间隔（毫秒）
+  retryInterval?: number;
+}
+
 // 路由配置：字符串（仅目标）或对象（包含路径/重写）
 export type ProxyRouteConfig =
   | string
@@ -37,6 +73,10 @@ export type ProxyRouteConfig =
       rewrite?: string; // 自定义重写前缀
       // WebSocket 配置
       ws?: WebSocketConfig;
+      // SSE 配置
+      sse?: SSEConfig;
+      // 自定义代理配置（会合并到 ProxyOptions，支持 HTTPS 选项）
+      customProxyConfig?: ExtendedProxyOptions;
     };
 
 // 兼容旧字段，同时支持任意键
@@ -82,6 +122,10 @@ export interface LoggerConfig {
   showWsConnections?: boolean;
   showWsMessages?: boolean;
   maxWsMessageLength?: number;
+  // SSE 日志配置
+  showSseConnections?: boolean;
+  showSseMessages?: boolean;
+  maxSseMessageLength?: number;
 }
 
 // 过滤器函数类型
@@ -111,6 +155,14 @@ export type WebSocketMiddleware = (
   head: Buffer
 ) => void | Promise<void>;
 
+// SSE 中间件函数类型
+export type SSEMiddleware = (
+  proxyReq: any,
+  req: any,
+  res: any,
+  options: any
+) => void | Promise<void>;
+
 // 插件配置选项（内部与直接传参使用）
 export interface ProxyPluginOptions<TEnv extends string = EnvKey> {
   // 基础配置
@@ -128,9 +180,10 @@ export interface ProxyPluginOptions<TEnv extends string = EnvKey> {
   // 中间件
   middleware?: ProxyMiddleware[];
   wsMiddleware?: WebSocketMiddleware[];
+  sseMiddleware?: SSEMiddleware[];
 
-  // 自定义代理配置
-  customProxyConfig?: Partial<ProxyOptions>;
+  // 自定义代理配置（支持 HTTPS 选项）
+  customProxyConfig?: ExtendedProxyOptions;
 
   // 重写规则
   rewriteRules?: Record<string, string>;
@@ -143,6 +196,8 @@ export interface ProxyPluginOptions<TEnv extends string = EnvKey> {
 
   // WebSocket 全局配置
   webSocket?: WebSocketConfig;
+  // SSE 全局配置
+  sse?: SSEConfig;
 }
 
 // 外部用户配置（外部文件 proxy.config.* 使用），与插件选项一致

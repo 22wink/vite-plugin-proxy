@@ -5,10 +5,13 @@ import type {
   PluginState,
   ProxyMiddleware,
   WebSocketMiddleware,
+  SSEMiddleware,
   WebSocketFilter,
   EnvKey,
   ProxyRouteConfig,
-  WebSocketConfig
+  WebSocketConfig,
+  SSEConfig,
+  ExtendedProxyOptions
 } from "./types.js";
 import { ProxyEnv, LogLevel } from "./types.js";
 import { createLogger, ProxyLogger } from "./logger.js";
@@ -22,6 +25,7 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
   private logger: ProxyLogger;
   private middleware: ProxyMiddleware[];
   private wsMiddleware: WebSocketMiddleware[];
+  private sseMiddleware: SSEMiddleware[];
   private requestFilter?: (url: string, method: string) => boolean;
   private responseFilter?: (
     url: string,
@@ -40,6 +44,7 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
     // 初始化中间件
     this.middleware = this.options.middleware || [];
     this.wsMiddleware = this.options.wsMiddleware || [];
+    this.sseMiddleware = this.options.sseMiddleware || [];
 
     // 设置过滤器
     this.requestFilter = this.options.requestFilter;
@@ -74,6 +79,9 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
         showWsConnections: true,
         showWsMessages: false,
         maxWsMessageLength: 1000,
+        showSseConnections: true,
+        showSseMessages: false,
+        maxSseMessageLength: 1000,
         ...this.options.logger
       },
       enabled: this.options.enabled !== false
@@ -134,6 +142,45 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
     return defaultConfig;
   }
 
+  private getSSEConfig(routeConfig?: ProxyRouteConfig): SSEConfig {
+    const defaultConfig: SSEConfig = {
+      enabled: true,
+      logConnections: true,
+      logMessages: false,
+      maxMessageLength: 1000,
+      prettifyMessages: true,
+      headers: {},
+      retryInterval: 3000,
+      ...this.options.sse
+    };
+
+    if (typeof routeConfig === 'object' && routeConfig.sse) {
+      return { ...defaultConfig, ...routeConfig.sse };
+    }
+
+    return defaultConfig;
+  }
+
+  private isSSERequest(req: any): boolean {
+    const acceptHeader = req.headers?.accept || '';
+    return acceptHeader.includes('text/event-stream');
+  }
+
+  private async executeSSEMiddleware(
+    proxyReq: any,
+    req: any,
+    res: any,
+    options: any
+  ): Promise<void> {
+    for (const middleware of this.sseMiddleware) {
+      try {
+        await middleware(proxyReq, req, res, options);
+      } catch (error) {
+        this.logger.error(`SSE 中间件执行失败: ${error}`);
+      }
+    }
+  }
+
   private createProxyConfig(
     target: string,
     rewritePath?: string,
@@ -141,6 +188,47 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
   ): ProxyOptions {
     const startTime = new Map<string, number>();
     const wsConfig = this.getWebSocketConfig(routeConfig);
+    const sseConfig = this.getSSEConfig(routeConfig);
+    
+    // 获取路由级别的自定义代理配置
+    const routeCustomConfig = typeof routeConfig === 'object' && routeConfig !== null && 'customProxyConfig' in routeConfig
+      ? routeConfig.customProxyConfig
+      : undefined;
+
+    // 合并自定义配置：路由级别 > 全局级别
+    const mergedCustomConfig: ExtendedProxyOptions = {
+      ...this.options.customProxyConfig,
+      ...routeCustomConfig
+    };
+
+    // 提取 HTTPS 相关选项（这些选项需要在 configure 中应用到 options）
+    const httpsOptions: Record<string, any> = {};
+    const httpsOptionKeys = [
+      'rejectUnauthorized',
+      'secure',
+      'ca',
+      'cert',
+      'key',
+      'passphrase',
+      'pfx',
+      'ciphers',
+      'honorCipherOrder',
+      'minVersion',
+      'maxVersion'
+    ];
+    
+    for (const key of httpsOptionKeys) {
+      if (key in mergedCustomConfig) {
+        httpsOptions[key] = (mergedCustomConfig as any)[key];
+      }
+    }
+
+    // 提取标准 ProxyOptions（排除 HTTPS 选项）
+    // 使用类型断言，因为我们会在下面删除 HTTPS 选项
+    const standardProxyOptions = { ...mergedCustomConfig } as Partial<ProxyOptions>;
+    for (const key of httpsOptionKeys) {
+      delete (standardProxyOptions as any)[key];
+    }
 
     return {
       target,
@@ -149,8 +237,13 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
       ws: wsConfig.enabled,
       rewrite: rewritePath ? this.createRewriteRule(rewritePath) : undefined,
       timeout: wsConfig.timeout,
-      ...this.options.customProxyConfig,
+      // 应用标准代理选项
+      ...standardProxyOptions,
       configure: (proxy, options) => {
+        // 应用 HTTPS 选项到 options 对象
+        if (Object.keys(httpsOptions).length > 0) {
+          Object.assign(options, httpsOptions);
+        }
         // 请求开始
         proxy.on("proxyReq", async (proxyReq, req, res) => {
           const method = req.method || "GET";
@@ -167,6 +260,18 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
           // 记录开始时间
           startTime.set(requestKey, Date.now());
 
+          // 检测 SSE 请求
+          const isSSE = this.isSSERequest(req);
+          if (isSSE && sseConfig.enabled) {
+            // 执行 SSE 中间件
+            await this.executeSSEMiddleware(proxyReq, req, res, options);
+            
+            // 记录 SSE 连接日志
+            if (sseConfig.logConnections) {
+              this.logger.logSSEConnection(method, fullUrl);
+            }
+          }
+
           // 应用过滤器
           if (
             this.requestFilter &&
@@ -178,12 +283,14 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
           // 执行中间件
           await this.executeMiddleware(proxyReq, req, res, options);
 
-          // 记录基础请求日志
-          this.logger.logRequest(method, fullUrl);
+          // 记录基础请求日志（非 SSE 请求）
+          if (!isSSE) {
+            this.logger.logRequest(method, fullUrl);
+          }
         });
 
         // 响应返回
-        proxy.on("proxyRes", (proxyRes, req) => {
+        proxy.on("proxyRes", (proxyRes, req, res) => {
           const method = req.method || "GET";
           const originalUrl = req.url || "";
           const status = proxyRes.statusCode || 0;
@@ -195,6 +302,44 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             rewrittenPath = this.createRewriteRule(rewritePath)(originalUrl);
           }
           const fullResponseUrl = `${target}${rewrittenPath}`;
+
+          // 检测 SSE 响应
+          const isSSE = this.isSSERequest(req);
+          if (isSSE && sseConfig.enabled) {
+            // 设置 SSE 必需的响应头
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no'); // 禁用 Nginx 缓冲
+            
+            // 应用自定义 SSE 头部
+            if (sseConfig.headers) {
+              Object.entries(sseConfig.headers).forEach(([key, value]) => {
+                res.setHeader(key, value);
+              });
+            }
+
+            // 如果配置了重试间隔，添加 retry 头部
+            if (sseConfig.retryInterval) {
+              res.setHeader('Retry-After', sseConfig.retryInterval.toString());
+            }
+
+            // 监听 SSE 数据流
+            if (sseConfig.logMessages) {
+              let buffer = '';
+              proxyRes.on('data', (chunk: Buffer) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // 保留最后一个不完整的行
+                
+                lines.forEach(line => {
+                  if (line.trim()) {
+                    this.logger.logSSEMessage(fullResponseUrl, line, sseConfig.maxMessageLength, sseConfig.prettifyMessages);
+                  }
+                });
+              });
+            }
+          }
 
           // 计算响应时间
           const duration = startTime.has(requestKey)
@@ -210,8 +355,10 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             return;
           }
 
-          // 记录基础响应日志
-          this.logger.logResponse(method, fullResponseUrl, status, duration);
+          // 记录基础响应日志（非 SSE 请求）
+          if (!isSSE) {
+            this.logger.logResponse(method, fullResponseUrl, status, duration);
+          }
         });
 
         // WebSocket 支持配置
@@ -242,7 +389,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             if (rewritePath) {
               rewrittenPath = this.createRewriteRule(rewritePath)(originalUrl);
             }
-            const wsTarget = target.replace(/^http/, 'ws');
+            // 支持 HTTP -> WS 和 HTTPS -> WSS 的转换
+            const wsTarget = target.replace(/^https/, 'wss').replace(/^http/, 'ws');
             const fullWsUrl = `${wsTarget}${rewrittenPath}`;
 
             // 记录 WebSocket 连接日志
@@ -265,7 +413,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
               if (rewritePath) {
                 rewrittenPath = this.createRewriteRule(rewritePath)(originalUrl);
               }
-              const wsTarget = target.replace(/^http/, 'ws');
+              // 支持 HTTP -> WS 和 HTTPS -> WSS 的转换
+              const wsTarget = target.replace(/^https/, 'wss').replace(/^http/, 'ws');
               const fullWsUrl = `${wsTarget}${rewrittenPath}`;
 
               if (wsConfig.logConnections) {
@@ -350,7 +499,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
       proxy[routePath] = this.createProxyConfig(target, rewritePath, value);
       
       const wsStatus = typeof value === 'object' && value.ws?.enabled === false ? '❌' : '✅';
-      this.logger.debug(`添加代理: ${key} -> ${routePath} => ${target} (rewrite: ${rewritePath}) [WebSocket: ${wsStatus}]`);
+      const sseStatus = typeof value === 'object' && value.sse?.enabled === false ? '❌' : '✅';
+      this.logger.debug(`添加代理: ${key} -> ${routePath} => ${target} (rewrite: ${rewritePath}) [WebSocket: ${wsStatus}] [SSE: ${sseStatus}]`);
     }
 
     return proxy;
@@ -380,6 +530,7 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             this.logger = createLogger(this.options.logger);
             this.middleware = this.options.middleware || [];
             this.wsMiddleware = this.options.wsMiddleware || [];
+            this.sseMiddleware = this.options.sseMiddleware || [];
             this.requestFilter = this.options.requestFilter;
             this.responseFilter = this.options.responseFilter;
             this.webSocketFilter = this.options.webSocketFilter;

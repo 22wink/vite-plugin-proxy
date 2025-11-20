@@ -10,10 +10,14 @@ export type {
   RequestFilter,
   ResponseFilter,
   ProxyMiddleware,
+  SSEMiddleware,
+  WebSocketMiddleware,
   PluginState,
   ProxyEvents,
   EnvKey,
-  ProxyPluginUserConfig
+  ProxyPluginUserConfig,
+  WebSocketConfig,
+  SSEConfig
 } from "./modules/types";
 
 export { ProxyEnv, LogLevel } from "./modules/types";

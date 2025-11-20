@@ -1,25 +1,30 @@
 // vite.config.ts - 高级用法示例
 import { defineConfig } from "vite";
-import { createProxyPlugin, ProxyEnv, LogLevel } from "vite-enhanced-proxy";
+import { createProxyPlugin, LogLevel } from "vite-enhanced-proxy";
+
+enum MyEnv {
+  Development = "development",
+  Staging = "staging",
+  Production = "production"
+}
 
 export default defineConfig({
   plugins: [
-    createProxyPlugin({
+    createProxyPlugin<MyEnv>({
       // 环境配置
-      env: ProxyEnv.Development,
-      
+      env: MyEnv.Development,
       // 代理目标配置
       targets: {
-        [ProxyEnv.Local]: {
+        [MyEnv.Development]: {
           v3: "http://localhost:8000/api/v3",
           v2: "http://localhost:8000/api/v2",
           flow: "http://localhost:8002"
         },
-        [ProxyEnv.Development]: {
+        [MyEnv.Staging]: {
           v3: "https://dev-api.example.com/v3",
           v2: "https://dev-api.example.com/v2"
         },
-        [ProxyEnv.Staging]: {
+        [MyEnv.Production]: {
           v3: "https://staging-api.example.com/v3",
           v2: "https://staging-api.example.com/v2"
         }

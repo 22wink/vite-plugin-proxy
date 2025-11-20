@@ -79,6 +79,10 @@ export class ProxyLogger {
       showWsConnections: true,
       showWsMessages: false,
       maxWsMessageLength: 1000,
+      // SSE 配置默认值
+      showSseConnections: true,
+      showSseMessages: false,
+      maxSseMessageLength: 1000,
       ...config
     };
 
@@ -239,6 +243,66 @@ export class ProxyLogger {
       this.formatUrl(url),
       "-",
       this.colorize(error.message, colors.red)
+    ].filter(Boolean);
+
+    console.log(parts.join(" "));
+  }
+
+  // SSE 专用日志方法
+  logSSEConnection(method: string, url: string): void {
+    if (!this.shouldLog(LogLevel.INFO) || !this.config.showSseConnections) return;
+
+    const parts = [
+      this.formatTimestamp(),
+      this.formatPrefix(),
+      this.formatMethod(method),
+      this.colorize("📡 SSE 连接:", colors.cyan),
+      this.formatUrl(url)
+    ].filter(Boolean);
+
+    console.log(parts.join(" "));
+  }
+
+  logSSEMessage(
+    url: string,
+    message: string,
+    maxLength?: number,
+    prettify?: boolean
+  ): void {
+    if (!this.shouldLog(LogLevel.INFO) || !this.config.showSseMessages) return;
+
+    let formattedMessage = message;
+    const maxLen = maxLength || this.config.maxSseMessageLength;
+
+    // 截断过长消息
+    if (formattedMessage.length > maxLen) {
+      formattedMessage = formattedMessage.substring(0, maxLen) + "...";
+    }
+
+    // 尝试美化 JSON
+    if (prettify !== false && this.config.prettifyJson) {
+      try {
+        // 尝试解析 SSE 消息格式 (data: {...})
+        const dataMatch = formattedMessage.match(/^data:\s*(.+)$/);
+        if (dataMatch) {
+          const jsonData = JSON.parse(dataMatch[1]);
+          formattedMessage = `data: ${JSON.stringify(jsonData, null, 2)}`;
+        } else {
+          const jsonData = JSON.parse(formattedMessage);
+          formattedMessage = JSON.stringify(jsonData, null, 2);
+        }
+      } catch {
+        // 不是 JSON，保持原样
+      }
+    }
+
+    const parts = [
+      this.formatTimestamp(),
+      this.formatPrefix(),
+      this.colorize("📨 SSE 消息:", colors.magenta),
+      this.formatUrl(url),
+      "-",
+      this.colorize(formattedMessage, colors.gray)
     ].filter(Boolean);
 
     console.log(parts.join(" "));
