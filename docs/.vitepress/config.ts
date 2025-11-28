@@ -89,7 +89,10 @@ const enSidebar: DefaultTheme.Sidebar = {
   ]
 };
 
+const base = process.env.DOCS_BASE ?? "/";
+
 const config: UserConfig = {
+  base,
   lastUpdated: true,
   cleanUrls: true,
   locales: {
