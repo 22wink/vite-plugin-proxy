@@ -85,4 +85,4 @@ createProxyPlugin({
 
 ## 与 Vite 原生 proxy 配置的关系
 
-vite-enhanced-proxy 代替了 `server.proxy` 的部分职责，并在内部使用 `http-proxy`. 若已经配置 `server.proxy`，建议将相关规则迁移至本插件，以获得统一的日志与中间件能力。仍需使用 `server.proxy` 的情况下，也可以两者并存，但请确保路径不冲突。*** End Patch
+vite-enhanced-proxy 代替了 `server.proxy` 的部分职责，并在内部使用 `http-proxy`. 若已经配置 `server.proxy`，建议将相关规则迁移至本插件，以获得统一的日志与中间件能力。仍需使用 `server.proxy` 的情况下，也可以两者并存，但请确保路径不冲突。

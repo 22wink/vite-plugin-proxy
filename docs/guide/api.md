@@ -78,4 +78,4 @@ createProxyPlugin<MyEnv>({
 - Vite：`^3 - ^7`
 - Node.js：`>= 16`
 
-如需了解近期改动与升级注意事项，请关注 GitHub Releases。*** End Patch
+如需了解近期改动与升级注意事项，请关注 GitHub Releases。
