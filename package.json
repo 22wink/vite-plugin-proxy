@@ -47,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/22wink/vite-enhanced-proxy/issues"
   },
-  "homepage": "https://github.com/22wink/vite-enhanced-proxy#readme",
+  "homepage": "https://22wink.github.io/vite-enhanced-proxy/",
   "peerDependencies": {
     "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
   },
