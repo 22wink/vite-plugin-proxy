@@ -33,6 +33,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
     status: number
   ) => boolean;
   private webSocketFilter?: WebSocketFilter;
+  private wsConnectionCount = 0;
+  private sseConnectionCount = 0;
 
   constructor(private options: ProxyPluginOptions<TEnv> = {}) {
     // 初始化状态
@@ -126,6 +128,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
     const defaultConfig: WebSocketConfig = {
       enabled: true,
       timeout: 30000,
+      maxConnections: 50,
+      heartbeatInterval: 30000,
       logConnections: true,
       logMessages: false,
       maxMessageLength: 1000,
@@ -145,6 +149,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
   private getSSEConfig(routeConfig?: ProxyRouteConfig): SSEConfig {
     const defaultConfig: SSEConfig = {
       enabled: true,
+      maxConnections: 100,
+      heartbeatInterval: 30000,
       logConnections: true,
       logMessages: false,
       maxMessageLength: 1000,
@@ -164,6 +170,47 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
   private isSSERequest(req: any): boolean {
     const acceptHeader = req.headers?.accept || '';
     return acceptHeader.includes('text/event-stream');
+  }
+
+  private validateRewriteRules() {
+    const rules = this.options.rewriteRules;
+    if (!rules) return;
+
+    for (const [routePath, rewrite] of Object.entries(rules)) {
+      if (!routePath.startsWith("/")) {
+        throw new Error(`rewriteRules 的键必须以 "/" 开头: ${routePath}`);
+      }
+      if (typeof rewrite !== "string" || rewrite.trim() === "") {
+        throw new Error(`rewriteRules 的值不能为空字符串: ${routePath}`);
+      }
+      if (!rewrite.startsWith("/")) {
+        throw new Error(`rewriteRules 的值必须以 "/" 开头: ${routePath} -> ${rewrite}`);
+      }
+    }
+  }
+
+  private attachWsHeartbeat(
+    socket: any,
+    url: string,
+    config: WebSocketConfig
+  ): void {
+    if (!config.heartbeatInterval || config.heartbeatInterval <= 0) return;
+    const timer = setInterval(() => {
+      this.logger.debug(`🔄 WebSocket 心跳: ${url} (连接数 ${this.wsConnectionCount}/${config.maxConnections})`);
+    }, config.heartbeatInterval);
+    socket.once("close", () => clearInterval(timer));
+  }
+
+  private attachSseHeartbeat(
+    res: any,
+    url: string,
+    config: SSEConfig
+  ): void {
+    if (!config.heartbeatInterval || config.heartbeatInterval <= 0) return;
+    const timer = setInterval(() => {
+      this.logger.debug(`🔄 SSE 心跳: ${url} (连接数 ${this.sseConnectionCount}/${config.maxConnections})`);
+    }, config.heartbeatInterval);
+    res.once("close", () => clearInterval(timer));
   }
 
   private async executeSSEMiddleware(
@@ -263,6 +310,18 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
           // 检测 SSE 请求
           const isSSE = this.isSSERequest(req);
           if (isSSE && sseConfig.enabled) {
+            if (
+              typeof sseConfig.maxConnections === "number" &&
+              sseConfig.maxConnections > 0 &&
+              this.sseConnectionCount >= sseConfig.maxConnections
+            ) {
+              startTime.delete(requestKey);
+              res.statusCode = 503;
+              res.end("SSE connection limit reached");
+              this.logger.warn(`SSE 连接被拒绝，达到最大连接数限制 (${sseConfig.maxConnections})`);
+              return;
+            }
+            this.sseConnectionCount += 1;
             // 执行 SSE 中间件
             await this.executeSSEMiddleware(proxyReq, req, res, options);
             
@@ -270,6 +329,10 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             if (sseConfig.logConnections) {
               this.logger.logSSEConnection(method, fullUrl);
             }
+            this.attachSseHeartbeat(res, fullUrl, sseConfig);
+            res.once("close", () => {
+              this.sseConnectionCount = Math.max(0, this.sseConnectionCount - 1);
+            });
           }
 
           // 应用过滤器
@@ -383,6 +446,15 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             if (this.webSocketFilter && !this.webSocketFilter(originalUrl)) {
               return;
             }
+            if (
+              typeof wsConfig.maxConnections === "number" &&
+              wsConfig.maxConnections > 0 &&
+              this.wsConnectionCount >= wsConfig.maxConnections
+            ) {
+              this.logger.warn(`WebSocket 连接被拒绝，达到最大连接数限制 (${wsConfig.maxConnections})`);
+              socket.destroy();
+              return;
+            }
 
             // 构建完整的 WebSocket URL
             let rewrittenPath = originalUrl;
@@ -397,6 +469,11 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
             if (wsConfig.logConnections) {
               this.logger.info(`🔗 WebSocket 连接升级: ${fullWsUrl}`);
             }
+            this.wsConnectionCount += 1;
+            socket.once("close", () => {
+              this.wsConnectionCount = Math.max(0, this.wsConnectionCount - 1);
+            });
+            this.attachWsHeartbeat(socket, fullWsUrl, wsConfig);
 
             // 执行 WebSocket 中间件
             this.executeWebSocketMiddleware(null, req, socket, head).catch((error) => {
@@ -457,6 +534,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
       this.logger.info("代理已禁用");
       return {};
     }
+
+    this.validateRewriteRules();
 
     const currentTargets =
       (this.state.targets as any)[this.state.env as any] || ((this.state.targets as any)[ProxyEnv.Local as any] || (DEFAULT_PROXY_TARGETS as any)[ProxyEnv.Local]);

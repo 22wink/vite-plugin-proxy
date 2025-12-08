@@ -7,6 +7,8 @@
 English | [中文](README.zh_CN.md)
 A powerful Vite proxy plugin with advanced features including colored logs, environment switching, filters, middleware, and more.
 
+**Dev-only:** This plugin only applies during `vite dev` and is not recommended for production. For production reverse proxying, prefer your edge/gateway (Nginx/Ingress/API Gateway) and keep this plugin disabled.
+
 ## ✨ Features
 
 - 🎨 **Colored Logs** - Beautiful console output with customizable colors
@@ -736,6 +738,8 @@ WebSocket configuration options.
 
 - `enabled` - Whether to enable WebSocket proxy (default: `true`)
 - `timeout` - WebSocket connection timeout (milliseconds)
+- `maxConnections` - Maximum concurrent WS connections; new connections are rejected when the limit is reached (default: `50`)
+- `heartbeatInterval` - Heartbeat log interval in ms; set `0` to disable (default: `30000`)
 - `logConnections` - Whether to log connections (default: `false`)
 - `logMessages` - Whether to log messages (default: `false`)
 - `maxMessageLength` - Maximum message log length (default: `1000`)
@@ -750,6 +754,8 @@ SSE (Server-Sent Events) configuration options.
 **Properties:**
 
 - `enabled` - Whether to enable SSE proxy (default: `true`)
+- `maxConnections` - Maximum concurrent SSE connections; new connections are rejected when the limit is reached (default: `100`)
+- `heartbeatInterval` - Heartbeat log interval in ms; set `0` to disable (default: `30000`)
 - `logConnections` - Whether to log connections (default: `false`)
 - `logMessages` - Whether to log messages (default: `false`)
 - `maxMessageLength` - Maximum message log length (default: `1000`)

@@ -32,6 +32,10 @@ export interface WebSocketConfig {
   enabled?: boolean;
   // WebSocket 连接超时时间（毫秒）
   timeout?: number;
+  // 允许的最大连接数（达到后拒绝新连接）
+  maxConnections?: number;
+  // 心跳日志间隔（毫秒，0 表示关闭）
+  heartbeatInterval?: number;
   // 是否记录 WebSocket 连接日志
   logConnections?: boolean;
   // 是否记录 WebSocket 消息日志
@@ -50,6 +54,10 @@ export interface WebSocketConfig {
 export interface SSEConfig {
   // 是否启用 SSE 代理
   enabled?: boolean;
+  // 允许的最大连接数（达到后拒绝新连接）
+  maxConnections?: number;
+  // 心跳日志间隔（毫秒，0 表示关闭）
+  heartbeatInterval?: number;
   // 是否记录 SSE 连接日志
   logConnections?: boolean;
   // 是否记录 SSE 消息日志

@@ -26,6 +26,18 @@ title: 核心配置
 | `enabled` | `boolean` | `true` | 是否启用代理 |
 | `devOnly` | `boolean` | `false` | 仅在 `vite dev` 生效 |
 
+### WebSocketConfig 关键字段
+
+- `timeout`：连接超时时间（ms）
+- `maxConnections`：最大并发连接数，超过则拒绝新连接（默认 50）
+- `heartbeatInterval`：心跳日志间隔（ms，设 0 关闭，默认 30000）
+
+### SSEConfig 关键字段
+
+- `enabled`：是否启用
+- `maxConnections`：最大并发连接数，超过则拒绝新连接（默认 100）
+- `heartbeatInterval`：心跳日志间隔（ms，设 0 关闭，默认 30000）
+
 ### targets 结构
 
 ```ts

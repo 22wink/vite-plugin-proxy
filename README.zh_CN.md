@@ -7,6 +7,8 @@
 [English](README.md) | 中文
 一个功能强大的 Vite 代理插件，提供彩色日志、环境切换、过滤器、中间件等高级功能。
 
+**仅开发环境生效：** 插件只会在 `vite dev` 时启用，不建议用于生产环境。生产流量请使用边缘或网关（如 Nginx / Ingress / API Gateway），并保持此插件关闭。
+
 ## ✨ 特性
 
 - 🎨 **彩色日志** - 美观的控制台输出，支持自定义颜色
@@ -736,6 +738,8 @@ WebSocket 配置选项。
 
 - `enabled` - 是否启用 WebSocket 代理（默认：`true`）
 - `timeout` - WebSocket 连接超时时间（毫秒）
+- `maxConnections` - 最大并发 WS 连接数，达到上限将拒绝新连接（默认：`50`）
+- `heartbeatInterval` - 心跳日志间隔（毫秒，设为 `0` 关闭，默认：`30000`）
 - `logConnections` - 是否记录连接日志（默认：`false`）
 - `logMessages` - 是否记录消息日志（默认：`false`）
 - `maxMessageLength` - 最大消息日志长度（默认：`1000`）
@@ -750,6 +754,8 @@ SSE (Server-Sent Events) 配置选项。
 **属性：**
 
 - `enabled` - 是否启用 SSE 代理（默认：`true`）
+- `maxConnections` - 最大并发 SSE 连接数，达到上限将拒绝新连接（默认：`100`）
+- `heartbeatInterval` - 心跳日志间隔（毫秒，设为 `0` 关闭，默认：`30000`）
 - `logConnections` - 是否记录连接日志（默认：`false`）
 - `logMessages` - 是否记录消息日志（默认：`false`）
 - `maxMessageLength` - 最大消息日志长度（默认：`1000`）

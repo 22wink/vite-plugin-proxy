@@ -26,6 +26,18 @@ This page lists every option accepted by `createProxyPlugin`, including defaults
 | `enabled` | `boolean` | `true` | Toggle the proxy |
 | `devOnly` | `boolean` | `false` | Only run during `vite dev` |
 
+### WebSocketConfig highlights
+
+- `timeout`: connection timeout (ms)
+- `maxConnections`: max concurrent WS connections; new ones are rejected after the limit (default 50)
+- `heartbeatInterval`: heartbeat log interval in ms; set to `0` to disable (default 30000)
+
+### SSEConfig highlights
+
+- `enabled`: enable/disable SSE proxy
+- `maxConnections`: max concurrent SSE connections; new ones are rejected after the limit (default 100)
+- `heartbeatInterval`: heartbeat log interval in ms; set to `0` to disable (default 30000)
+
 ### targets structure
 
 ```ts
