@@ -54,8 +54,11 @@ export function createSseClient(events: SseClientEvents) {
     });
 
     eventSource.onerror = (error) => {
+      // EventSource 会自动重连，避免手动关闭导致连接断开
       events.onNetworkError?.(error);
-      cleanup("error");
+      if (eventSource?.readyState === EventSource.CLOSED) {
+        cleanup("error");
+      }
     };
   }
 

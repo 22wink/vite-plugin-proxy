@@ -54,6 +54,8 @@ export interface WebSocketConfig {
 export interface SSEConfig {
   // 是否启用 SSE 代理
   enabled?: boolean;
+  // SSE 连接超时时间（毫秒，0 表示不超时，建议 SSE 场景设为 0）
+  timeout?: number;
   // 允许的最大连接数（达到后拒绝新连接）
   maxConnections?: number;
   // 心跳日志间隔（毫秒，0 表示关闭）

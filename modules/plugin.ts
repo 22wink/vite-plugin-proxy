@@ -149,6 +149,7 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
   private getSSEConfig(routeConfig?: ProxyRouteConfig): SSEConfig {
     const defaultConfig: SSEConfig = {
       enabled: true,
+      timeout: 0, // SSE 长连默认不超时
       maxConnections: 100,
       heartbeatInterval: 30000,
       logConnections: true,
@@ -283,7 +284,8 @@ class ViteProxyPlugin<TEnv extends string = EnvKey> {
       // 启用 WebSocket 支持
       ws: wsConfig.enabled,
       rewrite: rewritePath ? this.createRewriteRule(rewritePath) : undefined,
-      timeout: wsConfig.timeout,
+      // SSE 优先使用自身 timeout，未配置则退回 WS / 代理默认
+      timeout: typeof sseConfig.timeout === "number" ? sseConfig.timeout : wsConfig.timeout,
       // 应用标准代理选项
       ...standardProxyOptions,
       configure: (proxy, options) => {
